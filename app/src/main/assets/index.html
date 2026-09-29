@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
+<title>Pocket Pen</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ============ HOME ============ -->
+<section id="home" class="screen">
+  <header class="bar">
+    <button class="ib" id="upBtn" aria-label="Up a folder" hidden data-i="back"></button>
+    <h1 id="homeTitle">Pocket Pen</h1>
+    <button class="ib" id="sortBtn" aria-label="Sort" data-i="sort"></button>
+    <button class="ib" id="homeSettingsBtn" aria-label="Settings" data-i="gear"></button>
+  </header>
+  <div class="homebody">
+    <div class="search"><span data-i="search"></span><input id="search" type="search" placeholder="Search bookmarks" autocomplete="off" spellcheck="false"></div>
+    <div id="crumbs" class="crumbs"></div>
+    <div id="draftCard"></div>
+    <div id="list" class="list"></div>
+    <div id="empty" class="empty" hidden>
+      <div class="empty-art">&lt;/&gt;</div>
+      <p>Nothing bookmarked here yet.</p>
+      <p class="muted">Tap <b>New file</b>, or open the scratch editor and hit the bookmark to save it.</p>
+    </div>
+  </div>
+  <div class="homeactions">
+    <button class="btn" id="newFolderBtn"><span data-i="folderPlus"></span>Folder</button>
+    <button class="btn" id="scratchBtn"><span data-i="code"></span>Scratch</button>
+    <button class="btn primary" id="newFileBtn"><span data-i="plus"></span>New file</button>
+  </div>
+</section>
+
+<!-- ============ EDITOR ============ -->
+<section id="editor" class="screen hidden">
+  <header class="bar">
+    <button class="ib" id="backBtn" aria-label="Home" data-i="back"></button>
+    <button class="titlebtn" id="penTitle"><span id="penName">Scratch</span><small id="penSub">not saved</small></button>
+    <button class="chip" id="twBtn" aria-label="Toggle Tailwind">TW</button>
+    <button class="ib" id="bookmarkBtn" aria-label="Bookmark" data-i="bookmark"></button>
+    <button class="ib" id="moreBtn" aria-label="More" data-i="dots"></button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="html">HTML</button>
+    <button class="tab" data-tab="css">CSS</button>
+    <button class="tab" data-tab="js">JS</button>
+    <button class="tab" data-tab="console">Console<i id="conBadge" hidden></i></button>
+    <span class="grow"></span>
+    <label class="fscheck" title="Run fullscreen"><input type="checkbox" id="fsChk"><span data-i="expand"></span></label>
+    <button class="run" id="runBtn"><span data-i="play"></span>Run</button>
+  </nav>
+
+  <div id="work">
+    <div id="codePane">
+      <div id="findBar" class="findbar" hidden>
+        <div class="row">
+          <input id="findIn" placeholder="Find" autocomplete="off" spellcheck="false" autocapitalize="off">
+          <span id="findCount" class="muted">0/0</span>
+          <button class="ib sm" id="findCase" title="Match case">Aa</button>
+          <button class="ib sm" id="findPrev" data-i="up"></button>
+          <button class="ib sm" id="findNext" data-i="down"></button>
+          <button class="ib sm" id="findClose" data-i="x"></button>
+        </div>
+        <div class="row">
+          <input id="replIn" placeholder="Replace with" autocomplete="off" spellcheck="false" autocapitalize="off">
+          <button class="btn sm" id="replOne">Replace</button>
+          <button class="btn sm" id="replAll">All</button>
+        </div>
+      </div>
+      <div class="ed" data-lang="html"><div class="gutter"><div class="nums"></div></div><div class="stack"><pre class="hl" aria-hidden="true"></pre><textarea spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" placeholder="HTML — paste a whole page or just markup"></textarea></div></div>
+      <div class="ed" data-lang="css" hidden><div class="gutter"><div class="nums"></div></div><div class="stack"><pre class="hl" aria-hidden="true"></pre><textarea spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" placeholder="CSS"></textarea></div></div>
+      <div class="ed" data-lang="js" hidden><div class="gutter"><div class="nums"></div></div><div class="stack"><pre class="hl" aria-hidden="true"></pre><textarea spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" placeholder="JavaScript"></textarea></div></div>
+      <div id="console" class="console" hidden>
+        <div id="conList" class="conlist"><div class="muted conempty">Console output from your preview shows up here.</div></div>
+        <div class="conin">
+          <span>›</span><input id="conInput" placeholder="Run JS in the preview…" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="ib sm" id="conClear" title="Clear" data-i="trash"></button>
+        </div>
+      </div>
+    </div>
+    <div id="divider" hidden><span></span></div>
+    <div id="previewPane" hidden>
+      <div class="pvbar">
+        <span class="muted">Preview</span>
+        <span class="grow"></span>
+        <button class="ib sm" id="pvReload" title="Re-run" data-i="reload"></button>
+        <button class="ib sm" id="pvFull" title="Fullscreen" data-i="expand"></button>
+        <button class="ib sm" id="pvClose" title="Close preview" data-i="x"></button>
+      </div>
+      <div class="pvwrap"><iframe id="frame" title="Preview" sandbox="allow-scripts allow-modals allow-forms allow-popups allow-pointer-lock allow-downloads"></iframe></div>
+      <div class="pvfloat">
+        <button class="ib" id="fsReload" title="Re-run" data-i="reload"></button>
+        <button class="ib" id="fsSplit" title="Split view" data-i="split"></button>
+        <button class="ib" id="fsClose" title="Close" data-i="x"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="keys" class="keys"></div>
+</section>
+
+<div id="scrim" hidden></div>
+<div id="sheet" hidden></div>
+<div id="toast" hidden></div>
+
+<script src="hl.js"></script>
+<script src="fmt.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
