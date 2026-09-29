@@ -2,6 +2,7 @@ name: Build APK
 
 on:
   push:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -26,19 +27,13 @@ jobs:
           ./gradlew assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk PocketPen.apk
 
-      - name: Keep APK as a build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PocketPen-apk
-          path: PocketPen.apk
-
       # Publishes the APK on the repo's "Releases" page so you can grab it
       # straight from your phone's browser.
       - name: Publish to the "latest" release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
+          target_commitish: ${{ github.sha }}
           name: Pocket Pen (latest build)
           body: Built from ${{ github.sha }}. Download PocketPen.apk below and open it on your phone to install.
           files: PocketPen.apk
