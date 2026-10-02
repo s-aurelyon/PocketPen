@@ -132,7 +132,7 @@
   function parentOf(path) { var i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
   function baseOf(path) { return path.slice(path.lastIndexOf('/') + 1); }
   function cleanName(s) { return String(s || '').replace(/[\/\\]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80); }
-  function blankPen() { return { id: null, name: '', folder: '', html: '', css: '', js: '', tw: false, libs: '', tab: 'html' }; }
+  function blankPen() { return { id: null, name: '', folder: '', html: '', css: '', js: '', tw: false, libs: '', tab: 'html', ai: '' }; }
   function hasContent(p) { return !!(p && ((p.html || '').trim() || (p.css || '').trim() || (p.js || '').trim())); }
 
   // ================= ui helpers =================
@@ -300,6 +300,7 @@
     if ((p.css || '').trim()) s += '<b class="dot c">CSS</b>';
     if ((p.js || '').trim()) s += '<b class="dot j">JS</b>';
     if (p.tw) s += '<b class="dot t">TW</b>';
+    if (p.ai) s += '<b class="dot a">' + esc(p.ai) + '</b>';
     return s;
   }
   function wireItem(el) {
@@ -514,7 +515,7 @@
     cur.tab = activeTab === 'console' ? (cur.tab || 'html') : activeTab;
     if (cur.id) {
       var p = pens.get(cur.id);
-      var changedAny = !p || ['html', 'css', 'js', 'tw', 'libs', 'name', 'folder'].some(function (k) { return p[k] !== cur[k]; });
+      var changedAny = !p || ['html', 'css', 'js', 'tw', 'libs', 'name', 'folder', 'ai'].some(function (k) { return p[k] !== cur[k]; });
       var copy = JSON.parse(JSON.stringify(cur));
       if (p && !changedAny) copy.updated = p.updated;
       writePen(copy, changedAny);
@@ -915,6 +916,9 @@
     bb.innerHTML = icon(cur.id ? 'bookmarkOn' : 'bookmark');
     bb.classList.toggle('on', !!cur.id);
     $('#twBtn').classList.toggle('on', !!cur.tw);
+    var ab = $('#aiBtn');
+    ab.textContent = cur.ai || 'AI';
+    ab.classList.toggle('on', !!cur.ai);
   }
   $('#backBtn').onclick = showHome;
 
@@ -973,6 +977,22 @@
   }
   $('#bookmarkBtn').onclick = bookmark;
   $('#penTitle').onclick = function () { if (cur && cur.id) { saveCurrent(); renamePen(pens.get(cur.id)); } else bookmark(); };
+  // ---- AI tag: a label you set yourself; exported as <meta name="generator-ai"> ----
+  var AI_PICKS = ['Claude', 'ChatGPT', 'Gemini', 'Copilot', 'Grok', 'DeepSeek'];
+  function aiSheet() {
+    if (!cur) return;
+    ui.open('<h2>AI used</h2><label class="field"><span>Which AI helped with this pen? Leave empty for none.</span><input type="text" id="aiIn" value="' + escAttr(cur.ai || '') + '" placeholder="e.g. Claude Sonnet 5.5" maxlength="60" autocomplete="off" spellcheck="false"></label>' +
+      '<div class="tpls">' + AI_PICKS.map(function (n) { return '<button class="tpl" data-ai="' + n + '"><b>' + n + '</b></button>'; }).join('') + '</div>' +
+      '<p class="muted" style="font-size:12px;margin:10px 2px 0">Shown as a chip here and on Home, and written into exported HTML as <code>&lt;meta name="generator-ai"&gt;</code>.</p>' +
+      '<div class="acts"><button class="btn" id="aiNo">Cancel</button><button class="btn primary" id="aiOk">Save</button></div>');
+    var inp = $('#aiIn');
+    $$('[data-ai]', sheetEl).forEach(function (b) { b.onclick = function () { inp.value = b.getAttribute('data-ai'); inp.focus(); }; });
+    function save() { cur.ai = cleanName(inp.value).slice(0, 60); ui.close(); updateHeader(); saveCurrent(); toast(cur.ai ? 'AI tag: ' + cur.ai : 'AI tag cleared'); }
+    $('#aiNo').onclick = function () { ui.close(); };
+    $('#aiOk').onclick = save;
+    inp.onkeydown = function (e) { if (e.key === 'Enter') save(); };
+  }
+  $('#aiBtn').onclick = aiSheet;
   $('#twBtn').onclick = function () {
     cur.tw = !cur.tw; updateHeader(); saveCurrent();
     toast(cur.tw ? 'Tailwind on (v' + S.twv + ', loads from CDN)' : 'Tailwind off');
@@ -1164,7 +1184,7 @@
 
   function buildDoc(p, exporting) {
     var libs = (p.libs || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
-    var bits = '';
+    var bits = p.ai ? '<meta name="generator-ai" content="' + escAttr(p.ai) + '">' : '';
     if (p.tw) bits += S.twv === '3' ? '<script src="https://cdn.tailwindcss.com"><\/script>' : '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"><\/script>';
     libs.forEach(function (u) {
       if (/\.css([?#]|$)/i.test(u) || /fonts\.googleapis\.com\/css/i.test(u)) bits += '<link rel="stylesheet" href="' + escAttr(u) + '">';
