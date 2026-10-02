@@ -44,4 +44,20 @@ Every push rebuilds the APK. All builds are signed with the same key (`pocketpen
 
 Also: share text from any app to **Pocket Pen** to paste it into a new pen, and long-press the app icon for a **New pen** shortcut.
 
+## GitHub, versions and the AI tag
+
+**AI tag:** tap the **AI** chip in the editor header and type (or pick) the AI that helped. It's optional and yours to set. It shows on Home and is written into exported HTML as `<meta name="generator-ai" content="…">`.
+
+**Versions (offline):** ⋮ → **Versions…** keeps up to 40 snapshots per bookmarked pen. Save one with a note, restore any, rename or delete. Restoring and pulling take an automatic snapshot first.
+
+**GitHub:** the branch icon on Home (or ⋮ → **GitHub…**).
+- **Sign in** with GitHub's device flow: the app shows a code, you approve it on github.com. One-time setup: on github.com go to *Settings → Developer settings → OAuth Apps → New OAuth App* (any homepage/callback URL, tick **Enable Device Flow**), and paste its **Client ID** into the app. A fine-grained token also works as a fallback.
+- **Add repository** downloads its text files (HTML, CSS, JS, JSON, Markdown…; images are skipped) into a folder, on the branch you pick. Each file opens in its own editor tab.
+- **Run** on a repo's HTML page inlines its relative `<script src>` and stylesheet files, so multi-file projects work. For a `.js`/`.css` file, use *Use as the run page* once.
+- **Commit changes** sends all edited and new files (new file = a pen named like `foo.js` inside the folder) as one commit. If a changed pen has an AI tag, the message gets an `AI: …` line you can edit.
+- **Pull latest** updates unchanged files. If you edited a file that changed on GitHub, your edit is kept and GitHub's copy is saved under Versions.
+- **History** per file or repo: load an older version of a file, or load every file from a commit as edits. **Bookmark** commits to find them again under *Bookmarked commits*.
+
+Not covered: deleting or renaming files on GitHub, binary files, merging conflicting edits line by line.
+
 Files are stored privately in the app's storage. Uninstalling the app deletes them.

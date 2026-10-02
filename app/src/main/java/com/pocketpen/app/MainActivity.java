@@ -34,6 +34,9 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Pocket Pen: a WebView shell around the editor in assets/index.html.
@@ -346,6 +349,32 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "Could not share", Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+        /** GitHub API / device-flow request run off the UI thread. The result is
+         *  handed back to PenGH._http(id, status, body); status 0 means no connection. */
+        @JavascriptInterface
+        public void http(String t, String id, String method, String url, String headersJson, String body) {
+            if (!ok(t) || id == null) return;
+            new Thread(() -> {
+                int status = 0;
+                String out;
+                try {
+                    Map<String, String> h = new HashMap<>();
+                    JSONObject o = new JSONObject(headersJson == null || headersJson.isEmpty() ? "{}" : headersJson);
+                    for (Iterator<String> it = o.keys(); it.hasNext(); ) {
+                        String k = it.next();
+                        h.put(k, o.getString(k));
+                    }
+                    GitHubHttp.Result r = GitHubHttp.request(method, url, h, body);
+                    status = r.status;
+                    out = r.body;
+                } catch (Exception e) {
+                    out = String.valueOf(e.getMessage());
+                }
+                final String js = "window.PenGH && PenGH._http(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(out) + ")";
+                runOnUiThread(() -> { if (web != null) web.evaluateJavascript(js, null); });
+            }).start();
         }
 
         @JavascriptInterface
