@@ -128,7 +128,7 @@
     pens.set(p.id, p);
     if (!store.set('pen:' + p.id, JSON.stringify(p))) toast('Could not save “' + p.name + '”');
   }
-  function deletePen(id) { pens.delete(id); store.remove('pen:' + id); }
+  function deletePen(id) { pens.delete(id); store.remove('pen:' + id); store.remove('ver:' + id); }
   function parentOf(path) { var i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
   function baseOf(path) { return path.slice(path.lastIndexOf('/') + 1); }
   function cleanName(s) { return String(s || '').replace(/[\/\\]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80); }
@@ -999,6 +999,67 @@
     if (!$('#previewPane').hidden) run('keep');
   };
 
+  // ---- versions (local snapshots; the last 40 per bookmarked pen) ----
+  var MAXV = 40, VKEYS = ['html', 'css', 'js', 'tw', 'libs', 'ai'];
+  function getVers(id) { return store.json('ver:' + id, []); }
+  function putVers(id, v) { if (!store.set('ver:' + id, JSON.stringify(v))) toast('Could not save version'); }
+  function snapshot(p, note, auto) {
+    if (!p || !p.id) return false;
+    var v = getVers(p.id), s = { t: Date.now(), note: note || '', auto: !!auto };
+    VKEYS.forEach(function (k) { s[k] = k === 'tw' ? !!p[k] : (p[k] || ''); });
+    if (v[0] && VKEYS.every(function (k) { return v[0][k] === s[k]; })) {
+      if (note && !auto) { v[0].note = note; v[0].auto = false; putVers(p.id, v); }
+      return false;
+    }
+    v.unshift(s);
+    while (v.length > MAXV) { var i = v.map(function (x) { return x.auto; }).lastIndexOf(true); v.splice(i >= 0 ? i : v.length - 1, 1); }
+    putVers(p.id, v);
+    return true;
+  }
+  function applyToEditor(src) {
+    ['html', 'css', 'js'].forEach(function (l) { if (eds[l].ta.value !== (src[l] || '')) setValueUndoable(eds[l].ta, src[l] || ''); });
+    if (src.tw !== undefined) cur.tw = !!src.tw;
+    if (src.libs !== undefined) cur.libs = src.libs || '';
+    if (src.ai !== undefined) cur.ai = src.ai || '';
+    updateHeader(); saveCurrent();
+    if (!$('#previewPane').hidden) run('keep');
+  }
+  function versionsSheet() {
+    if (!cur) return;
+    if (!cur.id) { toast('Bookmark the pen first to keep versions'); return; }
+    saveCurrent();
+    var v = getVers(cur.id);
+    var rows = v.length ? v.map(function (x, i) {
+      var size = Math.max(1, Math.round(((x.html || '').length + (x.css || '').length + (x.js || '').length) / 100) / 10);
+      return '<button class="vrow" data-v="' + i + '"><b>' + esc(x.note || (x.auto ? 'Auto-saved' : 'Saved version')) + '</b><small>' + ago(x.t) + ' · ' + size + ' kB' + (x.ai ? ' · ' + esc(x.ai) : '') + '</small></button>';
+    }).join('') : '<p class="muted">No saved versions yet.</p>';
+    ui.open('<h2>Versions</h2><div class="acts" style="margin:0 0 10px"><button class="btn primary" id="vNew">Save version now</button></div><div class="vlist">' + rows + '</div>' +
+      '<p class="muted" style="font-size:12px;margin:10px 2px 0">Snapshots live on this device. Restoring first saves your current code, so nothing is lost.</p>');
+    $('#vNew').onclick = function () {
+      ui.close();
+      ui.prompt({ title: 'Name this version', label: 'Note (optional)', placeholder: 'e.g. before adding the menu', ok: 'Save' }).then(function (n) {
+        if (n === null) return;
+        snapshot(Object.assign({}, cur), cleanName(n), false); toast('Version saved');
+      });
+    };
+    $$('.vrow', sheetEl).forEach(function (b) {
+      b.onclick = function () {
+        var i = +b.getAttribute('data-v'), x = v[i];
+        ui.menu(x.note || 'Version', [
+          { id: 'restore', label: 'Restore this version', icon: 'reload' },
+          { id: 'name', label: 'Rename', icon: 'edit' },
+          { id: 'del', label: 'Delete', icon: 'trash', danger: true }
+        ]).then(function (a) {
+          if (a === 'restore') { snapshot(Object.assign({}, cur), 'Before restore', true); applyToEditor(x); toast('Version restored'); }
+          else if (a === 'name') ui.prompt({ title: 'Rename version', value: x.note, ok: 'Save' }).then(function (n) {
+            if (n === null) return; var cv = getVers(cur.id); if (cv[i]) { cv[i].note = cleanName(n); cv[i].auto = false; putVers(cur.id, cv); } versionsSheet();
+          });
+          else if (a === 'del') { var cv = getVers(cur.id); cv.splice(i, 1); putVers(cur.id, cv); versionsSheet(); }
+        });
+      };
+    });
+  }
+
   // ---- more menu ----
   $('#moreBtn').onclick = function () {
     var inCode = !!eds[activeTab];
@@ -1010,6 +1071,9 @@
       { id: 'pen', label: 'Tailwind & libraries', icon: 'box' },
       { id: 'wrap', label: (S.wrap ? 'Turn off' : 'Turn on') + ' word wrap', icon: 'wrap' },
       '-',
+      { id: 'ai', label: 'AI tag…', icon: 'wand' },
+      { id: 'ver', label: 'Versions…', icon: 'reload' },
+      '-',
       { id: 'copy', label: 'Copy as single HTML file', icon: 'copy' },
       { id: 'share', label: 'Share as HTML', icon: 'share' },
       '-',
@@ -1020,6 +1084,8 @@
       else if (a === 'find') openFind();
       else if (a === 'split') splitPasted();
       else if (a === 'pen') penSettings();
+      else if (a === 'ai') aiSheet();
+      else if (a === 'ver') versionsSheet();
       else if (a === 'wrap') { S.wrap = !S.wrap; saveSettings(); applySettings(); }
       else if (a === 'copy') { saveCurrent(); copyText(buildDoc(cur, true), 'HTML copied'); }
       else if (a === 'share') { saveCurrent(); shareText(cur.name || 'pen', buildDoc(cur, true)); }
