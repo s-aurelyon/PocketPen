@@ -37,11 +37,16 @@
     var h = { 'Accept': accept || 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     if (token) h.Authorization = 'Bearer ' + token;
     if (body !== undefined) h['Content-Type'] = 'application/json';
-    return http(method, 'https://api.github.com' + path, h, body === undefined ? null : JSON.stringify(body)).then(function (raw) {
-      var r = parse(raw);
-      if (r.status >= 200 && r.status < 300) return accept ? r.text : r.json;
-      throw fail(r, r.json);
-    });
+    var url = 'https://api.github.com' + path, payload = body === undefined ? null : JSON.stringify(body);
+    function go(tries) {
+      return http(method, url, h, payload).then(function (raw) {
+        var r = parse(raw);
+        if (r.status >= 200 && r.status < 300) return accept ? r.text : r.json;
+        if (r.status === 0 && method === 'GET' && tries > 0) return new Promise(function (ok) { setTimeout(ok, 1200); }).then(function () { return go(tries - 1); });
+        throw fail(r, r.json);
+      });
+    }
+    return go(2);
   }
 
   // ---------- device flow ----------
@@ -52,6 +57,7 @@
   function deviceStart(clientId, scope) {
     return postForm('https://github.com/login/device/code', { client_id: clientId, scope: scope || 'repo' }).then(function (r) {
       if (r.json && r.json.device_code) return r.json;
+      if (r.status === 0) throw new Error('No connection: ' + r.text);
       var msg = r.json && (r.json.error_description || r.json.error);
       if (r.json && r.json.error === 'device_flow_disabled') msg = 'Device flow is off for this OAuth app — tick “Enable Device Flow” in its settings.';
       var e = new Error(msg || ('GitHub error ' + r.status)); e.status = r.status; throw e;
@@ -59,7 +65,7 @@
   }
   // resolves with an access token; rejects with {cancelled:true} or an Error
   function devicePoll(clientId, dev, isCancelled) {
-    var interval = Math.max(5, dev.interval || 5), deadline = Date.now() + (dev.expires_in || 900) * 1000;
+    var interval = Math.max(5, dev.interval || 5), deadline = Date.now() + (dev.expires_in || 900) * 1000, flaky = 0;
     return new Promise(function (resolve, reject) {
       function tick() {
         if (isCancelled()) return reject({ cancelled: true });
@@ -69,12 +75,18 @@
         }).then(function (r) {
           if (isCancelled()) return reject({ cancelled: true });
           var j = r.json || {};
+          // no reply at all (e.g. the phone's network was paused while you were in the browser) or a GitHub hiccup: try again
+          if (!j.access_token && !j.error && (r.status === 0 || r.status >= 500)) {
+            if (++flaky > 12) return reject(new Error(r.status === 0 ? 'No connection: ' + r.text : 'GitHub error ' + r.status));
+            return setTimeout(tick, interval * 1000);
+          }
+          flaky = 0;
           if (j.access_token) return resolve(j.access_token);
           if (j.error === 'authorization_pending') return setTimeout(tick, interval * 1000);
           if (j.error === 'slow_down') { interval = j.interval || interval + 5; return setTimeout(tick, interval * 1000); }
           if (j.error === 'access_denied') return reject(new Error('Sign-in was cancelled on GitHub.'));
           if (j.error === 'expired_token') return reject(new Error('The code expired — start again.'));
-          reject(new Error(j.error_description || j.error || ('GitHub error ' + r.status)));
+          reject(new Error(j.error_description || j.error || ('GitHub error ' + r.status + (r.text ? ': ' + r.text.slice(0, 120) : ''))));
         }, function () { setTimeout(tick, interval * 1000); });   // transient network error: keep trying
       }
       setTimeout(tick, interval * 1000);
