@@ -1446,6 +1446,7 @@
   var GH = { auth: store.json('gh:auth', null), cfg: store.json('gh:cfg', { clientId: '' }), links: store.json('gh:links', []), marks: store.json('gh:marks', {}) };
   PenGH.init(B, TOKEN);
   function ghTok() { return GH.auth && GH.auth.token; }
+  function ghMark() { $('#ghBtn').classList.toggle('on', !!ghTok()); }
   function saveLinks() { store.set('gh:links', JSON.stringify(GH.links)); }
   function saveMarks() { store.set('gh:marks', JSON.stringify(GH.marks)); }
   function ghLink(repo) { return GH.links.filter(function (l) { return l.repo === repo; })[0]; }
@@ -1523,12 +1524,13 @@
       '<div class="acts"><button class="btn" id="ghOut">Sign out</button><button class="btn primary" id="ghAdd">Add repository</button></div>');
     $$('.vrow', sheetEl).forEach(function (b) { b.onclick = function () { ghRepoMenu(GH.links[+b.getAttribute('data-v')]); }; });
     $('#ghAdd').onclick = ghAddSheet;
-    $('#ghOut').onclick = function () { GH.auth = null; store.remove('gh:auth'); ui.close(); toast('Signed out of GitHub'); };
+    $('#ghOut').onclick = function () { GH.auth = null; store.remove('gh:auth'); ghMark(); ui.close(); toast('Signed out of GitHub'); };
   }
   function ghSaveAuth(token) {
     return PenGH.me(token).then(function (u) {
       GH.auth = { token: token, login: u.login }; store.set('gh:auth', JSON.stringify(GH.auth));
-      ui.close(); toast('Signed in as @' + u.login); ghSheet();
+      ghMark(); ui.close(); toast('Signed in as @' + u.login);
+      if (GH.links.length) ghSheet(); else ghAddSheet();   // straight to your repositories
     });
   }
   function ghSignInSheet() {
@@ -1549,20 +1551,31 @@
     };
   }
   function ghDeviceFlow(cid) {
-    var flow = { cancelled: false };
     ui.open('<h2>Contacting GitHub…</h2>');
     PenGH.deviceStart(cid, 'repo').then(function (dev) {
-      ui.open('<h2>Approve on GitHub</h2><p class="muted" style="margin:0">Open GitHub, enter this code and approve Code Lantern.</p><div class="devcode">' + esc(dev.user_code) + '</div>' +
-        '<div class="acts"><button class="btn" id="devCopy">Copy code</button><button class="btn primary" id="devOpen">Open GitHub</button></div><p class="muted" style="font-size:12px;margin:10px 0 0">Waiting for approval… (the code is already copied)</p>',
-        function () { flow.cancelled = true; });
+      store.set('gh:flow', JSON.stringify({ cid: cid, dev: dev, t: Date.now() }));   // lets sign-in finish even if the app reloads while you're in the browser
+      ghShowCode(cid, dev);
       try { if (B) B.copy(TOKEN, dev.user_code); } catch (e) {}
-      $('#devCopy').onclick = function () { copyText(dev.user_code, 'Code copied'); };
-      $('#devOpen').onclick = function () { openLink(dev.verification_uri || 'https://github.com/login/device'); };
-      return PenGH.devicePoll(cid, dev, function () { return flow.cancelled; }).then(ghSaveAuth);
+    }).catch(function (e) { ui.close(); ghErr(e); });
+  }
+  function ghShowCode(cid, dev) {
+    var flow = { cancelled: false };
+    ui.open('<h2>Approve on GitHub</h2><p class="muted" style="margin:0">Open GitHub, enter this code and approve Code Lantern. Then come back here.</p><div class="devcode">' + esc(dev.user_code) + '</div>' +
+      '<div class="acts"><button class="btn" id="devCopy">Copy code</button><button class="btn primary" id="devOpen">Open GitHub</button></div><p class="muted" style="font-size:12px;margin:10px 0 0">Waiting for approval… (the code is already copied)</p>',
+      function () { flow.cancelled = true; store.remove('gh:flow'); });
+    $('#devCopy').onclick = function () { copyText(dev.user_code, 'Code copied'); };
+    $('#devOpen').onclick = function () { openLink(dev.verification_uri || 'https://github.com/login/device'); };
+    PenGH.devicePoll(cid, dev, function () { return flow.cancelled; }).then(function (token) {
+      store.remove('gh:flow'); return ghSaveAuth(token);
     }).catch(function (e) {
       if (e && e.cancelled) return;
-      ui.close(); ghErr(e);
+      store.remove('gh:flow'); ui.close(); ghErr(e);
     });
+  }
+  function ghResumeFlow() {
+    var f = store.json('gh:flow', null);
+    if (!f || !f.dev || Date.now() > f.t + (f.dev.expires_in || 900) * 1000) { store.remove('gh:flow'); return; }
+    ghShowCode(f.cid, f.dev);
   }
   function ghTokenSheet() {
     ui.open('<h2>Use a token</h2><p class="muted" style="margin:0 0 10px">Create a fine-grained token at github.com → Settings → Developer settings → Personal access tokens. Give it your repo with <b>Contents: read and write</b>.</p>' +
@@ -1580,13 +1593,13 @@
     var tok = ghTok();
     ui.open('<h2>Add repository</h2><p class="muted" style="margin:0">Loading your repositories…</p>');
     PenGH.listRepos(tok).then(function (list) {
-      ui.open('<h2>Add repository</h2><label class="field"><span>Search, or type owner/name</span><input type="text" id="raQ" placeholder="mossy-jungle" autocomplete="off" autocapitalize="off" spellcheck="false"></label><div class="vlist" id="raList"></div>');
+      ui.open('<h2>Add repository</h2><p class="muted" style="margin:0 0 8px">Signed in as <b>@' + esc(GH.auth.login || '?') + '</b> · ' + list.length + ' repositor' + (list.length === 1 ? 'y' : 'ies') + ' found</p><label class="field"><span>Search, or type owner/name</span><input type="text" id="raQ" placeholder="mossy-jungle" autocomplete="off" autocapitalize="off" spellcheck="false"></label><div class="vlist" id="raList"></div>');
       function render() {
         var q = $('#raQ').value.trim().toLowerCase(), h = '';
         var shown = list.filter(function (r) { return !q || r.full_name.toLowerCase().indexOf(q) >= 0; }).slice(0, 40);
         shown.forEach(function (r) { h += '<button class="vrow" data-r="' + escAttr(r.full_name) + '"><b>' + esc(r.full_name) + '</b><small>' + (r.private ? 'private' : 'public') + ' · ' + esc(r.default_branch || 'main') + '</small></button>'; });
         if (PenGH.validRepo(q) && !shown.some(function (r) { return r.full_name.toLowerCase() === q; })) h += '<button class="vrow" data-r="' + escAttr($('#raQ').value.trim()) + '"><b>Use ' + esc($('#raQ').value.trim()) + '</b></button>';
-        $('#raList').innerHTML = h || '<p class="muted">No matches.</p>';
+        $('#raList').innerHTML = h || '<p class="muted">' + (list.length ? 'No matches.' : 'GitHub returned no repositories for this sign-in. Type owner/name above to add one by name.') + '</p>';
         $$('#raList .vrow').forEach(function (b) { b.onclick = function () { ghPickBranch(b.getAttribute('data-r')); }; });
       }
       $('#raQ').oninput = render; render();
@@ -1851,7 +1864,7 @@
     if (st.action === 'new') openScratch(true);
     else if (st.action === 'shared') { openScratch(true, st.text || ''); toast('Pasted into a new scratch pen', 'Split into tabs', splitPasted); }
   }
-  document.addEventListener('visibilitychange', function () { if (document.hidden && screen === 'editor') saveCurrent(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden && screen === 'editor') saveCurrent(); if (!document.hidden) PenGH.kick(); });
   window.addEventListener('pagehide', function () { if (screen === 'editor') saveCurrent(); });
   if (window.matchMedia) try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () { if (S.theme === 'system') applySettings(); }); } catch (e) {}
 
@@ -1872,4 +1885,6 @@
   else if (S.launch === 'scratch') openScratch(false);
   else if (S.launch === 'last' && S.lastPen && pens.has(S.lastPen)) openPen(pens.get(S.lastPen));
   else showHome();
+  ghMark();
+  ghResumeFlow();
 })();

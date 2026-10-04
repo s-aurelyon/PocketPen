@@ -64,10 +64,15 @@
     });
   }
   // resolves with an access token; rejects with {cancelled:true} or an Error
+  var kickFn = null;
   function devicePoll(clientId, dev, isCancelled) {
-    var interval = Math.max(5, dev.interval || 5), deadline = Date.now() + (dev.expires_in || 900) * 1000, flaky = 0;
-    return new Promise(function (resolve, reject) {
+    var interval = Math.max(5, dev.interval || 5), deadline = Date.now() + (dev.expires_in || 900) * 1000, flaky = 0, timer = 0, last = 0;
+    return new Promise(function (res, rej) {
+      function resolve(v) { kickFn = null; res(v); }
+      function reject(e) { kickFn = null; rej(e); }
+      function later(ms) { clearTimeout(timer); timer = setTimeout(tick, ms); }
       function tick() {
+        timer = 0; last = Date.now();
         if (isCancelled()) return reject({ cancelled: true });
         if (Date.now() > deadline) return reject(new Error('The code expired — start again.'));
         postForm('https://github.com/login/oauth/access_token', {
@@ -78,20 +83,23 @@
           // no reply at all (e.g. the phone's network was paused while you were in the browser) or a GitHub hiccup: try again
           if (!j.access_token && !j.error && (r.status === 0 || r.status >= 500)) {
             if (++flaky > 12) return reject(new Error(r.status === 0 ? 'No connection: ' + r.text : 'GitHub error ' + r.status));
-            return setTimeout(tick, interval * 1000);
+            return later(interval * 1000);
           }
           flaky = 0;
           if (j.access_token) return resolve(j.access_token);
-          if (j.error === 'authorization_pending') return setTimeout(tick, interval * 1000);
-          if (j.error === 'slow_down') { interval = j.interval || interval + 5; return setTimeout(tick, interval * 1000); }
+          if (j.error === 'authorization_pending') return later(interval * 1000);
+          if (j.error === 'slow_down') { interval = j.interval || interval + 5; return later(interval * 1000); }
           if (j.error === 'access_denied') return reject(new Error('Sign-in was cancelled on GitHub.'));
           if (j.error === 'expired_token') return reject(new Error('The code expired — start again.'));
           reject(new Error(j.error_description || j.error || ('GitHub error ' + r.status + (r.text ? ': ' + r.text.slice(0, 120) : ''))));
-        }, function () { setTimeout(tick, interval * 1000); });   // transient network error: keep trying
+        }, function () { later(interval * 1000); });   // transient network error: keep trying
       }
-      setTimeout(tick, interval * 1000);
+      // coming back from the browser: check now instead of waiting out the timer
+      kickFn = function () { if (timer && Date.now() - last >= interval * 1000) later(0); };
+      later(interval * 1000);
     });
   }
+  function kick() { if (kickFn) kickFn(); }
 
   // ---------- helpers ----------
   function refPath(branch) { return branch.split('/').map(encodeURIComponent).join('/'); }
@@ -190,7 +198,7 @@
 
   window.PenGH = {
     init: init, _http: deliver, http: http, api: api,
-    deviceStart: deviceStart, devicePoll: devicePoll,
+    deviceStart: deviceStart, devicePoll: devicePoll, kick: kick,
     me: me, listRepos: listRepos, repoInfo: repoInfo, branches: branches, headOf: headOf, treeAt: treeAt,
     blob: blob, fileAt: fileAt, history: history, commitFiles: commitFiles,
     blobSha: blobSha, sha1hex: sha1hex, isTextPath: isTextPath, validRepo: validRepo, pool: pool
