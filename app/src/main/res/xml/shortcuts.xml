@@ -7,8 +7,8 @@
         android:shortcutShortLabel="@string/shortcut_new_short"
         android:shortcutLongLabel="@string/shortcut_new_long">
         <intent
-            android:action="com.pocketpen.app.NEW"
-            android:targetPackage="com.pocketpen.app"
-            android:targetClass="com.pocketpen.app.MainActivity" />
+            android:action="com.codelantern.app.NEW"
+            android:targetPackage="com.codelantern.app"
+            android:targetClass="com.codelantern.app.MainActivity" />
     </shortcut>
 </shortcuts>

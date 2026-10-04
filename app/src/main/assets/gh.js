@@ -1,4 +1,4 @@
-/* Pocket Pen — GitHub client (no UI). Talks to GitHub through the Android bridge
+/* Code Lantern — GitHub client (no UI). Talks to GitHub through the Android bridge
    (device flow endpoints don't allow browser CORS), or plain fetch in a desktop browser. */
 (function () {
   'use strict';

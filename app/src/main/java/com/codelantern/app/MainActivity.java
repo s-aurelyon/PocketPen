@@ -1,4 +1,4 @@
-package com.pocketpen.app;
+package com.codelantern.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -39,14 +39,14 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * Pocket Pen: a WebView shell around the editor in assets/index.html.
+ * Code Lantern: a WebView shell around the editor in assets/index.html.
  * The page talks to this activity through the "Android" JavaScript bridge,
  * which stores pens, folders and settings as small files in app storage.
  */
 public class MainActivity extends Activity {
 
     static final String HOME_URL = "file:///android_asset/index.html";
-    static final String ACTION_NEW = "com.pocketpen.app.NEW";
+    static final String ACTION_NEW = "com.codelantern.app.NEW";
 
     private WebView web;
     private File storeDir;
@@ -331,7 +331,7 @@ public class MainActivity extends Activity {
             if (!ok(t)) return;
             runOnUiThread(() -> {
                 ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Pocket Pen", text));
+                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Code Lantern", text));
             });
         }
 

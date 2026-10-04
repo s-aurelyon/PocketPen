@@ -1,4 +1,4 @@
-/* Pocket Pen — lightweight formatters (re-indent + tidy) for HTML, CSS and JS. */
+/* Code Lantern — lightweight formatters (re-indent + tidy) for HTML, CSS and JS. */
 (function (g) {
   'use strict';
 

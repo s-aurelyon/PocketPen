@@ -1,4 +1,4 @@
-/* Pocket Pen — tiny syntax highlighters for HTML, CSS and JS.
+/* Code Lantern — tiny syntax highlighters for HTML, CSS and JS.
    Each returns escaped HTML with <span class="t-*"> tokens. */
 (function (g) {
   'use strict';

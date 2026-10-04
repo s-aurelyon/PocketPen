@@ -1,4 +1,4 @@
-/* Pocket Pen — app logic */
+/* Code Lantern — app logic */
 (function () {
   'use strict';
 
@@ -248,7 +248,7 @@
 
   function renderHome() {
     var q = $('#search').value.trim().toLowerCase();
-    $('#homeTitle').textContent = cwd && !q ? baseOf(cwd) : 'Pocket Pen';
+    $('#homeTitle').textContent = cwd && !q ? baseOf(cwd) : 'Code Lantern';
     $('#upBtn').hidden = !cwd || !!q;
     // crumbs
     var cr = $('#crumbs');
@@ -1430,7 +1430,7 @@
       sw('sClose', 'Auto-close brackets, quotes & tags', 'Also: Tab expands div.card, ul>li*3, ! …', S.autoclose) +
       sel('sTab', 'Indent size', '', S.tab, [['2', '2 spaces'], ['4', '4 spaces']]) +
       sel('sTheme', 'Theme', '', S.theme, [['dark', 'Dark'], ['light', 'Light'], ['system', 'System']]) +
-      '<p class="muted" style="font-size:12px;margin:14px 2px 0">Pocket Pen · your files are stored privately on this device.</p>');
+      '<p class="muted" style="font-size:12px;margin:14px 2px 0">Code Lantern · your files are stored privately on this device.</p>');
     function bind(id, key, conv) { $('#' + id).onchange = function () { S[key] = conv ? conv(this) : this.checked; saveSettings(); applySettings(); }; }
     bind('sLaunch', 'launch', function (e) { return e.value; });
     bind('sFull', 'fullscreen'); bind('sAuto', 'autorun'); bind('sClear', 'clearOnRun'); bind('sImm', 'immersive');
@@ -1532,12 +1532,12 @@
     });
   }
   function ghSignInSheet() {
-    ui.open('<h2>Sign in to GitHub</h2><p class="muted" style="margin:0 0 10px">Approve Pocket Pen on GitHub with a short code. No password or token to paste.</p>' +
+    ui.open('<h2>Sign in to GitHub</h2><p class="muted" style="margin:0 0 10px">Approve Code Lantern on GitHub with a short code. No password or token to paste.</p>' +
       '<label class="field"><span>OAuth Client ID (one-time setup)</span><input type="text" id="ghCid" value="' + escAttr(GH.cfg.clientId || '') + '" placeholder="Iv1.… or a 20-character id" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
       '<div class="acts"><button class="btn" id="ghTok">Use a token instead</button><button class="btn primary" id="ghGo">Sign in</button></div>' +
       '<details class="how"><summary>How do I get a Client ID?</summary><ol>' +
       '<li>On github.com open <b>Settings → Developer settings → OAuth Apps → New OAuth App</b>.</li>' +
-      '<li>Name it <b>Pocket Pen</b>. Homepage URL and callback URL can both be <b>https://github.com</b>.</li>' +
+      '<li>Name it <b>Code Lantern</b>. Homepage URL and callback URL can both be <b>https://github.com</b>.</li>' +
       '<li>Tick <b>Enable Device Flow</b>, then <b>Register application</b>.</li>' +
       '<li>Copy the <b>Client ID</b> (not the secret) and paste it above.</li></ol></details>');
     $('#ghTok').onclick = ghTokenSheet;
@@ -1552,7 +1552,7 @@
     var flow = { cancelled: false };
     ui.open('<h2>Contacting GitHub…</h2>');
     PenGH.deviceStart(cid, 'repo').then(function (dev) {
-      ui.open('<h2>Approve on GitHub</h2><p class="muted" style="margin:0">Open GitHub, enter this code and approve Pocket Pen.</p><div class="devcode">' + esc(dev.user_code) + '</div>' +
+      ui.open('<h2>Approve on GitHub</h2><p class="muted" style="margin:0">Open GitHub, enter this code and approve Code Lantern.</p><div class="devcode">' + esc(dev.user_code) + '</div>' +
         '<div class="acts"><button class="btn" id="devCopy">Copy code</button><button class="btn primary" id="devOpen">Open GitHub</button></div><p class="muted" style="font-size:12px;margin:10px 0 0">Waiting for approval… (the code is already copied)</p>',
         function () { flow.cancelled = true; });
       try { if (B) B.copy(TOKEN, dev.user_code); } catch (e) {}
@@ -1665,12 +1665,12 @@
     var ais = []; ch.forEach(function (c) { if (c.pen.ai && ais.indexOf(c.pen.ai) < 0) ais.push(c.pen.ai); });
     ui.open('<h2>Commit to ' + esc(link.repo) + '</h2><p class="muted" style="margin:0 0 8px">Branch <b>' + esc(link.branch) + '</b></p><div class="vlist">' +
       ch.map(function (c, i) { return '<label class="crow"><input type="checkbox" checked data-c="' + i + '"><span>' + esc(c.path) + '</span><small>' + (c.isNew ? 'new' : 'edited') + '</small></label>'; }).join('') + '</div>' +
-      '<label class="field" style="margin-top:10px"><span>Message</span><textarea id="cmMsg" rows="3" spellcheck="true">' + esc('Update from Pocket Pen' + (ais.length ? '\n\nAI: ' + ais.join(', ') : '')) + '</textarea></label>' +
+      '<label class="field" style="margin-top:10px"><span>Message</span><textarea id="cmMsg" rows="3" spellcheck="true">' + esc('Update from Code Lantern' + (ais.length ? '\n\nAI: ' + ais.join(', ') : '')) + '</textarea></label>' +
       '<div class="acts"><button class="btn" id="cmNo">Cancel</button><button class="btn primary" id="cmOk">Commit</button></div>');
     $('#cmNo').onclick = function () { ui.close(); };
     $('#cmOk').onclick = function () {
       var sel = ch.filter(function (c, i) { return $('[data-c="' + i + '"]', sheetEl).checked; });
-      var msg = $('#cmMsg').value.trim() || 'Update from Pocket Pen';
+      var msg = $('#cmMsg').value.trim() || 'Update from Code Lantern';
       if (!sel.length) { toast('Tick at least one file'); return; }
       ui.close();
       var busy = ghBusy('Committing ' + sel.length + ' file' + (sel.length > 1 ? 's' : '') + '…');
@@ -1777,7 +1777,7 @@
       { id: 'marks', label: 'Bookmarked commits' + (marks ? ' (' + marks + ')' : ''), icon: 'bookmark' },
       pen && pen.gh && pen.gh.tab === 'html' ? { id: 'entry', label: link.entry === pen.gh.path ? '✓ This is the run page' : 'Use as the run page for JS/CSS files', icon: 'play' } : null,
       '-',
-      { id: 'unlink', label: 'Remove from Pocket Pen', icon: 'trash', danger: true }
+      { id: 'unlink', label: 'Remove from Code Lantern', icon: 'trash', danger: true }
     ].filter(Boolean)).then(function (a) {
       if (a === 'commit') ghCommitSheet(link);
       else if (a === 'pull') ghPull(link);

@@ -1,16 +1,18 @@
-# Pocket Pen
+# Code Lantern
 
 A tiny CodePen / JSFiddle for Android. Paste or write HTML, CSS and JS (Tailwind optional), hit **Run**, and see it half-screen under your code or fullscreen.
 
 ## Get the APK (no Android Studio needed)
 
 1. Create a new repository on GitHub (private is fine) and upload everything in this folder, including the hidden `.github` folder.
-   - Easiest from a computer: `git init && git add . && git commit -m "Pocket Pen" && git branch -M main && git remote add origin <your repo URL> && git push -u origin main`
+   - Easiest from a computer: `git init && git add . && git commit -m "Code Lantern" && git branch -M main && git remote add origin <your repo URL> && git push -u origin main`
 2. Open the repo's **Actions** tab. The "Build APK" job starts automatically and takes about 3–5 minutes.
-3. When it's green, open the repo's **Releases** page on your phone and download **PocketPen.apk** from the "Pocket Pen (latest build)" release.
+3. When it's green, open the repo's **Releases** page on your phone and download **CodeLantern.apk** from the "Code Lantern (latest build)" release.
 4. Tap the file to install. Android will ask you to allow installs from your browser or file manager the first time.
 
 Every push rebuilds the APK. All builds are signed with the same key (`pocketpen.keystore`), so a new build installs over the old one and your saved files stay.
+
+> **Upgrading from Pocket Pen:** Code Lantern has a new app id (`com.codelantern.app`), so it installs as a separate app and does not see the old app's files. Before uninstalling Pocket Pen, open each pen and use ⋮ → *Copy as single HTML file* (or share it), then paste it into Code Lantern. From here on, updates install over each other as before.
 
 **Or with Android Studio:** open this folder, let Gradle sync, plug in your phone and press Run.
 
@@ -42,7 +44,7 @@ Every push rebuilds the APK. All builds are signed with the same key (`pocketpen
 
 **Settings:** open on the Home screen, straight into the scratch editor, or your last file · fullscreen by default · live preview · Tailwind version · font size · word wrap · line numbers · auto-close · indent size · dark / light / system theme
 
-Also: share text from any app to **Pocket Pen** to paste it into a new pen, and long-press the app icon for a **New pen** shortcut.
+Also: share text from any app to **Code Lantern** to paste it into a new pen, and long-press the app icon for a **New pen** shortcut.
 
 ## GitHub, versions and the AI tag
 

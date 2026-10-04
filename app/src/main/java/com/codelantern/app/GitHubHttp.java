@@ -1,4 +1,4 @@
-package com.pocketpen.app;
+package com.codelantern.app;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -46,7 +46,7 @@ final class GitHubHttp {
                     c.setRequestMethod("POST");
                     c.setRequestProperty("X-HTTP-Method-Override", method);
                 }
-                c.setRequestProperty("User-Agent", "PocketPen");
+                c.setRequestProperty("User-Agent", "CodeLantern");
                 if (headers != null) for (Map.Entry<String, String> e : headers.entrySet()) c.setRequestProperty(e.getKey(), e.getValue());
                 if (body != null && !body.isEmpty()) {
                     byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

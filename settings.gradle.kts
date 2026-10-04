@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "PocketPen"
+rootProject.name = "CodeLantern"
 include(":app")

@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.pocketpen.app"
+    namespace = "com.codelantern.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.pocketpen.app"
+        applicationId = "com.codelantern.app"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
