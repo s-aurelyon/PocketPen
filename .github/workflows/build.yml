@@ -25,7 +25,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace
-          cp app/build/outputs/apk/release/app-release.apk PocketPen.apk
+          cp app/build/outputs/apk/release/app-release.apk CodeLantern.apk
 
       # Publishes the APK on the repo's "Releases" page so you can grab it
       # straight from your phone's browser.
@@ -34,7 +34,7 @@ jobs:
         with:
           tag_name: latest
           target_commitish: ${{ github.sha }}
-          name: Pocket Pen (latest build)
-          body: Built from ${{ github.sha }}. Download PocketPen.apk below and open it on your phone to install.
-          files: PocketPen.apk
+          name: Code Lantern (latest build)
+          body: Built from ${{ github.sha }}. Download CodeLantern.apk below and open it on your phone to install.
+          files: CodeLantern.apk
           make_latest: true

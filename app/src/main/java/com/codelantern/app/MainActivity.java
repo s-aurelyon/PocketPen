@@ -1,4 +1,4 @@
-package com.pocketpen.app;
+package com.codelantern.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -34,16 +34,19 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
- * Pocket Pen: a WebView shell around the editor in assets/index.html.
+ * Code Lantern: a WebView shell around the editor in assets/index.html.
  * The page talks to this activity through the "Android" JavaScript bridge,
  * which stores pens, folders and settings as small files in app storage.
  */
 public class MainActivity extends Activity {
 
     static final String HOME_URL = "file:///android_asset/index.html";
-    static final String ACTION_NEW = "com.pocketpen.app.NEW";
+    static final String ACTION_NEW = "com.codelantern.app.NEW";
 
     private WebView web;
     private File storeDir;
@@ -328,7 +331,7 @@ public class MainActivity extends Activity {
             if (!ok(t)) return;
             runOnUiThread(() -> {
                 ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Pocket Pen", text));
+                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Code Lantern", text));
             });
         }
 
@@ -346,6 +349,32 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "Could not share", Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+        /** GitHub API / device-flow request run off the UI thread. The result is
+         *  handed back to PenGH._http(id, status, body); status 0 means no connection. */
+        @JavascriptInterface
+        public void http(String t, String id, String method, String url, String headersJson, String body) {
+            if (!ok(t) || id == null) return;
+            new Thread(() -> {
+                int status = 0;
+                String out;
+                try {
+                    Map<String, String> h = new HashMap<>();
+                    JSONObject o = new JSONObject(headersJson == null || headersJson.isEmpty() ? "{}" : headersJson);
+                    for (Iterator<String> it = o.keys(); it.hasNext(); ) {
+                        String k = it.next();
+                        h.put(k, o.getString(k));
+                    }
+                    GitHubHttp.Result r = GitHubHttp.request(method, url, h, body);
+                    status = r.status;
+                    out = r.body;
+                } catch (Exception e) {
+                    out = String.valueOf(e.getMessage());
+                }
+                final String js = "window.PenGH && PenGH._http(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(out) + ")";
+                runOnUiThread(() -> { if (web != null) web.evaluateJavascript(js, null); });
+            }).start();
         }
 
         @JavascriptInterface

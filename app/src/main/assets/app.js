@@ -1,4 +1,4 @@
-/* Pocket Pen — app logic */
+/* Code Lantern — app logic */
 (function () {
   'use strict';
 
@@ -38,6 +38,8 @@
     file: '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/>',
     open: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
     find: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+    upload: '<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>',
+    branch: '<circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 4-6 3-11 6"/>',
     wrap: '<path d="M4 6h16M4 12h13a3 3 0 0 1 0 6h-4M4 18h5M15 16l-2 2 2 2"/>'
   };
   function icon(n) {
@@ -128,11 +130,11 @@
     pens.set(p.id, p);
     if (!store.set('pen:' + p.id, JSON.stringify(p))) toast('Could not save “' + p.name + '”');
   }
-  function deletePen(id) { pens.delete(id); store.remove('pen:' + id); }
+  function deletePen(id) { pens.delete(id); store.remove('pen:' + id); store.remove('ver:' + id); }
   function parentOf(path) { var i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
   function baseOf(path) { return path.slice(path.lastIndexOf('/') + 1); }
   function cleanName(s) { return String(s || '').replace(/[\/\\]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80); }
-  function blankPen() { return { id: null, name: '', folder: '', html: '', css: '', js: '', tw: false, libs: '', tab: 'html' }; }
+  function blankPen() { return { id: null, name: '', folder: '', html: '', css: '', js: '', tw: false, libs: '', tab: 'html', ai: '' }; }
   function hasContent(p) { return !!(p && ((p.html || '').trim() || (p.css || '').trim() || (p.js || '').trim())); }
 
   // ================= ui helpers =================
@@ -246,7 +248,7 @@
 
   function renderHome() {
     var q = $('#search').value.trim().toLowerCase();
-    $('#homeTitle').textContent = cwd && !q ? baseOf(cwd) : 'Pocket Pen';
+    $('#homeTitle').textContent = cwd && !q ? baseOf(cwd) : 'Code Lantern';
     $('#upBtn').hidden = !cwd || !!q;
     // crumbs
     var cr = $('#crumbs');
@@ -300,6 +302,8 @@
     if ((p.css || '').trim()) s += '<b class="dot c">CSS</b>';
     if ((p.js || '').trim()) s += '<b class="dot j">JS</b>';
     if (p.tw) s += '<b class="dot t">TW</b>';
+    if (p.gh) s += '<b class="dot g">' + (ghModified(p) ? 'edited' : 'GH') + '</b>';
+    if (p.ai) s += '<b class="dot a">' + esc(p.ai) + '</b>';
     return s;
   }
   function wireItem(el) {
@@ -333,14 +337,16 @@
       '-',
       { id: 'copy', label: 'Copy as single HTML file', icon: 'copy' },
       { id: 'share', label: 'Share as HTML', icon: 'share' },
+      p.gh ? { id: 'gh', label: 'GitHub…', icon: 'branch' } : null,
       '-',
       { id: 'del', label: 'Delete', icon: 'trash', danger: true }
-    ]).then(function (a) {
-      if (a === 'open') openPen(p);
+    ].filter(Boolean)).then(function (a) {
+      if (a === 'gh') ghRepoMenu(ghLink(p.gh.repo), p);
+      else if (a === 'open') openPen(p);
       else if (a === 'run') { openPen(p); run('full'); }
       else if (a === 'rename') renamePen(p).then(renderHome);
       else if (a === 'move') pickFolder('Move “' + p.name + '”', p.folder).then(function (r) { if (r) { p.folder = r.folder; writePen(p, false); renderHome(); toast('Moved to ' + (r.folder || 'Home')); } });
-      else if (a === 'dup') { var c = Object.assign({}, p, { id: newId(), name: p.name + ' copy' }); writePen(c); renderHome(); toast('Duplicated'); }
+      else if (a === 'dup') { var c = Object.assign({}, p, { id: newId(), name: p.name + ' copy', gh: undefined }); writePen(c); renderHome(); toast('Duplicated'); }
       else if (a === 'copy') copyText(buildDoc(p, true), 'HTML copied');
       else if (a === 'share') shareText(p.name, buildDoc(p, true));
       else if (a === 'del') ui.confirm('Delete “' + p.name + '”?', 'This can’t be undone.', 'Delete', true).then(function (ok) { if (ok) { deletePen(p.id); renderHome(); toast('Deleted'); } });
@@ -357,12 +363,14 @@
     ui.menu(baseOf(f), [
       { id: 'open', label: 'Open', icon: 'open' },
       { id: 'newin', label: 'New file here', icon: 'plus' },
+      GH.links.some(function (l) { return l.root === f; }) ? { id: 'gh', label: 'GitHub…', icon: 'branch' } : null,
       { id: 'rename', label: 'Rename', icon: 'edit' },
       { id: 'move', label: 'Move', icon: 'move' },
       '-',
       { id: 'del', label: 'Delete folder and contents', icon: 'trash', danger: true }
-    ]).then(function (a) {
-      if (a === 'open') { cwd = f; renderHome(); }
+    ].filter(Boolean)).then(function (a) {
+      if (a === 'gh') ghRepoMenu(GH.links.filter(function (l) { return l.root === f; })[0]);
+      else if (a === 'open') { cwd = f; renderHome(); }
       else if (a === 'newin') { cwd = f; renderHome(); newFileDialog(); }
       else if (a === 'rename') ui.prompt({ title: 'Rename folder', value: baseOf(f), ok: 'Rename' }).then(function (v) {
         v = cleanName(v); if (!v) return; var np = parentOf(f) ? parentOf(f) + '/' + v : v;
@@ -514,9 +522,10 @@
     cur.tab = activeTab === 'console' ? (cur.tab || 'html') : activeTab;
     if (cur.id) {
       var p = pens.get(cur.id);
-      var changedAny = !p || ['html', 'css', 'js', 'tw', 'libs', 'name', 'folder'].some(function (k) { return p[k] !== cur[k]; });
+      var changedAny = !p || ['html', 'css', 'js', 'tw', 'libs', 'name', 'folder', 'ai'].some(function (k) { return p[k] !== cur[k]; });
       var copy = JSON.parse(JSON.stringify(cur));
       if (p && !changedAny) copy.updated = p.updated;
+      if (p) copy.gh = p.gh;   // sync state belongs to the stored pen, never a stale editor copy
       writePen(copy, changedAny);
       cur.updated = copy.updated;
     } else {
@@ -910,11 +919,15 @@
   function updateHeader() {
     if (!cur) return;
     $('#penName').textContent = cur.id ? (cur.name || 'Untitled') : 'Scratch';
-    $('#penSub').textContent = cur.id ? (cur.folder || 'Home') : 'not saved · tap ☆ to bookmark';
+    $('#penSub').textContent = cur.id ? (cur.folder || 'Home') + (cur.gh && ghModified(pens.get(cur.id) || cur) ? ' · edited' : '') : 'not saved · tap ☆ to bookmark';
     var bb = $('#bookmarkBtn');
     bb.innerHTML = icon(cur.id ? 'bookmarkOn' : 'bookmark');
     bb.classList.toggle('on', !!cur.id);
     $('#twBtn').classList.toggle('on', !!cur.tw);
+    $$('.tab[data-tab]').forEach(function (t) { var l = t.getAttribute('data-tab'); t.hidden = !!(cur.gh && l !== 'console' && l !== cur.gh.tab); });
+    var ab = $('#aiBtn');
+    ab.textContent = cur.ai || 'AI';
+    ab.classList.toggle('on', !!cur.ai);
   }
   $('#backBtn').onclick = showHome;
 
@@ -938,7 +951,7 @@
         else if (a === 'move') pickFolder('Move “' + cur.name + '”', cur.folder).then(function (r) { if (r) { cur.folder = r.folder; saveCurrent(); updateHeader(); toast('Moved to ' + (r.folder || 'Home')); } });
         else if (a === 'dup') {
           saveCurrent();
-          var c = JSON.parse(JSON.stringify(cur)); c.id = newId(); c.name = cur.name + ' copy'; writePen(c);
+          var c = JSON.parse(JSON.stringify(cur)); c.id = newId(); c.name = cur.name + ' copy'; delete c.gh; writePen(c);
           openPen(c); toast('Now editing the copy');
         } else if (a === 'remove') ui.confirm('Remove bookmark?', 'The file is deleted from your bookmarks. The code stays open here as unsaved scratch.', 'Remove', true).then(function (ok) {
           if (!ok) return;
@@ -973,11 +986,88 @@
   }
   $('#bookmarkBtn').onclick = bookmark;
   $('#penTitle').onclick = function () { if (cur && cur.id) { saveCurrent(); renamePen(pens.get(cur.id)); } else bookmark(); };
+  // ---- AI tag: a label you set yourself; exported as <meta name="generator-ai"> ----
+  var AI_PICKS = ['Claude', 'ChatGPT', 'Gemini', 'Copilot', 'Grok', 'DeepSeek'];
+  function aiSheet() {
+    if (!cur) return;
+    ui.open('<h2>AI used</h2><label class="field"><span>Which AI helped with this pen? Leave empty for none.</span><input type="text" id="aiIn" value="' + escAttr(cur.ai || '') + '" placeholder="e.g. Claude Sonnet 5.5" maxlength="60" autocomplete="off" spellcheck="false"></label>' +
+      '<div class="tpls">' + AI_PICKS.map(function (n) { return '<button class="tpl" data-ai="' + n + '"><b>' + n + '</b></button>'; }).join('') + '</div>' +
+      '<p class="muted" style="font-size:12px;margin:10px 2px 0">Shown as a chip here and on Home, and written into exported HTML as <code>&lt;meta name="generator-ai"&gt;</code>.</p>' +
+      '<div class="acts"><button class="btn" id="aiNo">Cancel</button><button class="btn primary" id="aiOk">Save</button></div>');
+    var inp = $('#aiIn');
+    $$('[data-ai]', sheetEl).forEach(function (b) { b.onclick = function () { inp.value = b.getAttribute('data-ai'); inp.focus(); }; });
+    function save() { cur.ai = cleanName(inp.value).slice(0, 60); ui.close(); updateHeader(); saveCurrent(); toast(cur.ai ? 'AI tag: ' + cur.ai : 'AI tag cleared'); }
+    $('#aiNo').onclick = function () { ui.close(); };
+    $('#aiOk').onclick = save;
+    inp.onkeydown = function (e) { if (e.key === 'Enter') save(); };
+  }
+  $('#aiBtn').onclick = aiSheet;
   $('#twBtn').onclick = function () {
     cur.tw = !cur.tw; updateHeader(); saveCurrent();
     toast(cur.tw ? 'Tailwind on (v' + S.twv + ', loads from CDN)' : 'Tailwind off');
     if (!$('#previewPane').hidden) run('keep');
   };
+
+  // ---- versions (local snapshots; the last 40 per bookmarked pen) ----
+  var MAXV = 40, VKEYS = ['html', 'css', 'js', 'tw', 'libs', 'ai'];
+  function getVers(id) { return store.json('ver:' + id, []); }
+  function putVers(id, v) { if (!store.set('ver:' + id, JSON.stringify(v))) toast('Could not save version'); }
+  function snapshot(p, note, auto) {
+    if (!p || !p.id) return false;
+    var v = getVers(p.id), s = { t: Date.now(), note: note || '', auto: !!auto };
+    VKEYS.forEach(function (k) { s[k] = k === 'tw' ? !!p[k] : (p[k] || ''); });
+    if (v[0] && VKEYS.every(function (k) { return v[0][k] === s[k]; })) {
+      if (note && !auto) { v[0].note = note; v[0].auto = false; putVers(p.id, v); }
+      return false;
+    }
+    v.unshift(s);
+    while (v.length > MAXV) { var i = v.map(function (x) { return x.auto; }).lastIndexOf(true); v.splice(i >= 0 ? i : v.length - 1, 1); }
+    putVers(p.id, v);
+    return true;
+  }
+  function applyToEditor(src) {
+    ['html', 'css', 'js'].forEach(function (l) { if (eds[l].ta.value !== (src[l] || '')) setValueUndoable(eds[l].ta, src[l] || ''); });
+    if (src.tw !== undefined) cur.tw = !!src.tw;
+    if (src.libs !== undefined) cur.libs = src.libs || '';
+    if (src.ai !== undefined) cur.ai = src.ai || '';
+    updateHeader(); saveCurrent();
+    if (!$('#previewPane').hidden) run('keep');
+  }
+  function versionsSheet() {
+    if (!cur) return;
+    if (!cur.id) { toast('Bookmark the pen first to keep versions'); return; }
+    saveCurrent();
+    var v = getVers(cur.id);
+    var rows = v.length ? v.map(function (x, i) {
+      var size = Math.max(1, Math.round(((x.html || '').length + (x.css || '').length + (x.js || '').length) / 100) / 10);
+      return '<button class="vrow" data-v="' + i + '"><b>' + esc(x.note || (x.auto ? 'Auto-saved' : 'Saved version')) + '</b><small>' + ago(x.t) + ' · ' + size + ' kB' + (x.ai ? ' · ' + esc(x.ai) : '') + '</small></button>';
+    }).join('') : '<p class="muted">No saved versions yet.</p>';
+    ui.open('<h2>Versions</h2><div class="acts" style="margin:0 0 10px"><button class="btn primary" id="vNew">Save version now</button></div><div class="vlist">' + rows + '</div>' +
+      '<p class="muted" style="font-size:12px;margin:10px 2px 0">Snapshots live on this device. Restoring first saves your current code, so nothing is lost.</p>');
+    $('#vNew').onclick = function () {
+      ui.close();
+      ui.prompt({ title: 'Name this version', label: 'Note (optional)', placeholder: 'e.g. before adding the menu', ok: 'Save' }).then(function (n) {
+        if (n === null) return;
+        snapshot(Object.assign({}, cur), cleanName(n), false); toast('Version saved');
+      });
+    };
+    $$('.vrow', sheetEl).forEach(function (b) {
+      b.onclick = function () {
+        var i = +b.getAttribute('data-v'), x = v[i];
+        ui.menu(x.note || 'Version', [
+          { id: 'restore', label: 'Restore this version', icon: 'reload' },
+          { id: 'name', label: 'Rename', icon: 'edit' },
+          { id: 'del', label: 'Delete', icon: 'trash', danger: true }
+        ]).then(function (a) {
+          if (a === 'restore') { snapshot(Object.assign({}, cur), 'Before restore', true); applyToEditor(x); toast('Version restored'); }
+          else if (a === 'name') ui.prompt({ title: 'Rename version', value: x.note, ok: 'Save' }).then(function (n) {
+            if (n === null) return; var cv = getVers(cur.id); if (cv[i]) { cv[i].note = cleanName(n); cv[i].auto = false; putVers(cur.id, cv); } versionsSheet();
+          });
+          else if (a === 'del') { var cv = getVers(cur.id); cv.splice(i, 1); putVers(cur.id, cv); versionsSheet(); }
+        });
+      };
+    });
+  }
 
   // ---- more menu ----
   $('#moreBtn').onclick = function () {
@@ -990,6 +1080,10 @@
       { id: 'pen', label: 'Tailwind & libraries', icon: 'box' },
       { id: 'wrap', label: (S.wrap ? 'Turn off' : 'Turn on') + ' word wrap', icon: 'wrap' },
       '-',
+      { id: 'ai', label: 'AI tag…', icon: 'wand' },
+      { id: 'ver', label: 'Versions…', icon: 'reload' },
+      { id: 'gh', label: 'GitHub…', icon: 'branch' },
+      '-',
       { id: 'copy', label: 'Copy as single HTML file', icon: 'copy' },
       { id: 'share', label: 'Share as HTML', icon: 'share' },
       '-',
@@ -1000,6 +1094,9 @@
       else if (a === 'find') openFind();
       else if (a === 'split') splitPasted();
       else if (a === 'pen') penSettings();
+      else if (a === 'ai') aiSheet();
+      else if (a === 'ver') versionsSheet();
+      else if (a === 'gh') { saveCurrent(); if (cur.gh) ghRepoMenu(ghLink(cur.gh.repo), pens.get(cur.id)); else ghSheet(); }
       else if (a === 'wrap') { S.wrap = !S.wrap; saveSettings(); applySettings(); }
       else if (a === 'copy') { saveCurrent(); copyText(buildDoc(cur, true), 'HTML copied'); }
       else if (a === 'share') { saveCurrent(); shareText(cur.name || 'pen', buildDoc(cur, true)); }
@@ -1164,7 +1261,7 @@
 
   function buildDoc(p, exporting) {
     var libs = (p.libs || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
-    var bits = '';
+    var bits = p.ai ? '<meta name="generator-ai" content="' + escAttr(p.ai) + '">' : '';
     if (p.tw) bits += S.twv === '3' ? '<script src="https://cdn.tailwindcss.com"><\/script>' : '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"><\/script>';
     libs.forEach(function (u) {
       if (/\.css([?#]|$)/i.test(u) || /fonts\.googleapis\.com\/css/i.test(u)) bits += '<link rel="stylesheet" href="' + escAttr(u) + '">';
@@ -1207,7 +1304,8 @@
     var full = mode === 'full' ? true : mode === 'split' ? false : mode === 'keep' ? pane.classList.contains('full') : $('#fsChk').checked;
     if (S.clearOnRun) clearConsole(true);
     runN++;
-    frame.srcdoc = buildDoc(cur) + '<!-- run ' + runN + ' -->';
+    var gl = cur.gh && ghLink(cur.gh.repo), gdoc = gl && pens.get(cur.id) ? ghRunDoc(gl, pens.get(cur.id)) : null;
+    frame.srcdoc = (gdoc || buildDoc(cur)) + '<!-- run ' + runN + ' -->';
     showPreview(full);
   }
   function isSide() { return screen && window.screen && window.screen.width > window.screen.height && window.innerWidth >= 700; }
@@ -1332,7 +1430,7 @@
       sw('sClose', 'Auto-close brackets, quotes & tags', 'Also: Tab expands div.card, ul>li*3, ! …', S.autoclose) +
       sel('sTab', 'Indent size', '', S.tab, [['2', '2 spaces'], ['4', '4 spaces']]) +
       sel('sTheme', 'Theme', '', S.theme, [['dark', 'Dark'], ['light', 'Light'], ['system', 'System']]) +
-      '<p class="muted" style="font-size:12px;margin:14px 2px 0">Pocket Pen · your files are stored privately on this device.</p>');
+      '<p class="muted" style="font-size:12px;margin:14px 2px 0">Code Lantern · your files are stored privately on this device.</p>');
     function bind(id, key, conv) { $('#' + id).onchange = function () { S[key] = conv ? conv(this) : this.checked; saveSettings(); applySettings(); }; }
     bind('sLaunch', 'launch', function (e) { return e.value; });
     bind('sFull', 'fullscreen'); bind('sAuto', 'autorun'); bind('sClear', 'clearOnRun'); bind('sImm', 'immersive');
@@ -1343,6 +1441,388 @@
     function fs(d) { S.fs = Math.max(10, Math.min(24, S.fs + d)); $('#sFs').textContent = S.fs; saveSettings(); applySettings(); }
     $('#sFsM').onclick = function () { fs(-1); }; $('#sFsP').onclick = function () { fs(1); };
   }
+
+  // ================= GITHUB =================
+  var GH = { auth: store.json('gh:auth', null), cfg: store.json('gh:cfg', { clientId: '' }), links: store.json('gh:links', []), marks: store.json('gh:marks', {}) };
+  PenGH.init(B, TOKEN);
+  function ghTok() { return GH.auth && GH.auth.token; }
+  function saveLinks() { store.set('gh:links', JSON.stringify(GH.links)); }
+  function saveMarks() { store.set('gh:marks', JSON.stringify(GH.marks)); }
+  function ghLink(repo) { return GH.links.filter(function (l) { return l.repo === repo; })[0]; }
+  function tabForPath(path) { return /\.css$/i.test(path) ? 'css' : /\.(m?js|cjs)$/i.test(path) ? 'js' : 'html'; }
+  function openLink(url) { try { if (B) { B.openUrl(TOKEN, url); return; } } catch (e) {} window.open(url, '_blank'); }
+  function ghAlert(msg, title) {
+    ui.open('<h2>' + esc(title || 'GitHub') + '</h2><p class="muted" style="margin:0">' + esc(msg) + '</p><div class="acts"><button class="btn primary" id="gaOk">OK</button></div>');
+    $('#gaOk').onclick = function () { ui.close(); };
+  }
+  function ghErr(e) {
+    if (e && e.cancelled) return;
+    var m = (e && e.message) || 'GitHub request failed';
+    if (e && e.status === 401) m = 'GitHub rejected the saved sign-in. Open GitHub and sign in again.';
+    else if (e && e.status === 422 && /fast.?forward/i.test(m)) m = 'GitHub has newer commits on this branch. Pull first, then commit again.';
+    else if (e && e.status === 404) m += ' — if this is a private repo, make sure the sign-in has access to it.';
+    else if (e && e.status === 403 && !/rate limit/i.test(m)) m += ' — the sign-in may not have write access to this repo.';
+    ghAlert(m, 'GitHub problem');
+  }
+  function ghBusy(title) {
+    var open = true;
+    ui.open('<h2>' + esc(title) + '</h2><p class="muted" id="ghMsg" style="margin:0">Working…</p>', function () { open = false; });
+    return { say: function (m) { var e = $('#ghMsg'); if (e) e.textContent = m; }, done: function () { if (open) ui.close(); } };
+  }
+
+  // a repo file is a pen whose pen.gh = {repo, path, sha (GitHub's id when last synced), bsha (id of the text we synced), tab}
+  var shaCache = {};
+  function localSha(p) {
+    var k = (p.updated || 0) + ':' + p.gh.tab, c = shaCache[p.id];
+    if (c && c.k === k) return c.v;
+    var v = PenGH.blobSha(p[p.gh.tab] || ''); shaCache[p.id] = { k: k, v: v }; return v;
+  }
+  function ghModified(p) { return !!(p && p.gh && localSha(p) !== p.gh.bsha); }
+  function ghPenFor(link, path) {
+    var r = null; pens.forEach(function (p) { if (p.gh && p.gh.repo === link.repo && p.gh.path === path) r = p; }); return r;
+  }
+  function ghWritePen(link, entry, text, existing) {
+    var tab = tabForPath(entry.path), dir = parentOf(entry.path);
+    var p = existing || Object.assign(blankPen(), { id: newId() });
+    p.name = baseOf(entry.path); p.folder = dir ? link.root + '/' + dir : link.root;
+    p.html = ''; p.css = ''; p.js = ''; p[tab] = text; p.tab = tab;
+    p.gh = { repo: link.repo, path: entry.path, sha: entry.sha, bsha: PenGH.blobSha(text), tab: tab };
+    ensureFolder(p.folder, true);
+    writePen(p);
+    return p;
+  }
+  function ghChanges(link) {
+    var out = [];
+    pens.forEach(function (p) {
+      if (p.gh) { if (p.gh.repo === link.repo && ghModified(p)) out.push({ pen: p, path: p.gh.path, content: p[p.gh.tab] || '', isNew: false }); return; }
+      var f = p.folder || '', name = p.name || '';
+      if (!(f === link.root || f.indexOf(link.root + '/') === 0) || !PenGH.isTextPath(name)) return;
+      var tab = tabForPath(name), rel = f.slice(link.root.length).replace(/^\//, '');
+      if (!(p[tab] || '').trim()) return;
+      out.push({ pen: p, path: (rel ? rel + '/' : '') + name, content: p[tab], isNew: true, tab: tab });
+    });
+    return out.sort(function (a, b) { return a.path < b.path ? -1 : 1; });
+  }
+  function ghAfter(touched) {
+    saveFolders(); saveLinks();
+    if (cur && cur.id) {
+      var sp = pens.get(cur.id);
+      if (sp) { if (touched && touched[cur.id]) loadIntoEditor(sp); else cur.gh = sp.gh; }
+    }
+    if (screen === 'home') renderHome();
+  }
+
+  // ---- sign in ----
+  function ghSheet() {
+    if (!ghTok()) return ghSignInSheet();
+    var rows = GH.links.map(function (l, i) {
+      var n = ghChanges(l).length;
+      return '<button class="vrow" data-v="' + i + '"><b>' + esc(l.repo) + '</b><small>' + esc(l.branch) + ' · ' + (n ? n + ' to commit' : 'in sync') + '</small></button>';
+    }).join('') || '<p class="muted">No repositories yet — add one to download it.</p>';
+    ui.open('<h2>GitHub</h2><p class="muted" style="margin:0 0 10px">Signed in as <b>@' + esc(GH.auth.login || '?') + '</b></p><div class="vlist">' + rows + '</div>' +
+      '<div class="acts"><button class="btn" id="ghOut">Sign out</button><button class="btn primary" id="ghAdd">Add repository</button></div>');
+    $$('.vrow', sheetEl).forEach(function (b) { b.onclick = function () { ghRepoMenu(GH.links[+b.getAttribute('data-v')]); }; });
+    $('#ghAdd').onclick = ghAddSheet;
+    $('#ghOut').onclick = function () { GH.auth = null; store.remove('gh:auth'); ui.close(); toast('Signed out of GitHub'); };
+  }
+  function ghSaveAuth(token) {
+    return PenGH.me(token).then(function (u) {
+      GH.auth = { token: token, login: u.login }; store.set('gh:auth', JSON.stringify(GH.auth));
+      ui.close(); toast('Signed in as @' + u.login); ghSheet();
+    });
+  }
+  function ghSignInSheet() {
+    ui.open('<h2>Sign in to GitHub</h2><p class="muted" style="margin:0 0 10px">Approve Code Lantern on GitHub with a short code. No password or token to paste.</p>' +
+      '<label class="field"><span>OAuth Client ID (one-time setup)</span><input type="text" id="ghCid" value="' + escAttr(GH.cfg.clientId || '') + '" placeholder="Iv1.… or a 20-character id" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+      '<div class="acts"><button class="btn" id="ghTok">Use a token instead</button><button class="btn primary" id="ghGo">Sign in</button></div>' +
+      '<details class="how"><summary>How do I get a Client ID?</summary><ol>' +
+      '<li>On github.com open <b>Settings → Developer settings → OAuth Apps → New OAuth App</b>.</li>' +
+      '<li>Name it <b>Code Lantern</b>. Homepage URL and callback URL can both be <b>https://github.com</b>.</li>' +
+      '<li>Tick <b>Enable Device Flow</b>, then <b>Register application</b>.</li>' +
+      '<li>Copy the <b>Client ID</b> (not the secret) and paste it above.</li></ol></details>');
+    $('#ghTok').onclick = ghTokenSheet;
+    $('#ghGo').onclick = function () {
+      var cid = $('#ghCid').value.trim();
+      if (!cid) { toast('Paste your OAuth Client ID first'); return; }
+      GH.cfg.clientId = cid; store.set('gh:cfg', JSON.stringify(GH.cfg));
+      ghDeviceFlow(cid);
+    };
+  }
+  function ghDeviceFlow(cid) {
+    var flow = { cancelled: false };
+    ui.open('<h2>Contacting GitHub…</h2>');
+    PenGH.deviceStart(cid, 'repo').then(function (dev) {
+      ui.open('<h2>Approve on GitHub</h2><p class="muted" style="margin:0">Open GitHub, enter this code and approve Code Lantern.</p><div class="devcode">' + esc(dev.user_code) + '</div>' +
+        '<div class="acts"><button class="btn" id="devCopy">Copy code</button><button class="btn primary" id="devOpen">Open GitHub</button></div><p class="muted" style="font-size:12px;margin:10px 0 0">Waiting for approval… (the code is already copied)</p>',
+        function () { flow.cancelled = true; });
+      try { if (B) B.copy(TOKEN, dev.user_code); } catch (e) {}
+      $('#devCopy').onclick = function () { copyText(dev.user_code, 'Code copied'); };
+      $('#devOpen').onclick = function () { openLink(dev.verification_uri || 'https://github.com/login/device'); };
+      return PenGH.devicePoll(cid, dev, function () { return flow.cancelled; }).then(ghSaveAuth);
+    }).catch(function (e) {
+      if (e && e.cancelled) return;
+      ui.close(); ghErr(e);
+    });
+  }
+  function ghTokenSheet() {
+    ui.open('<h2>Use a token</h2><p class="muted" style="margin:0 0 10px">Create a fine-grained token at github.com → Settings → Developer settings → Personal access tokens. Give it your repo with <b>Contents: read and write</b>.</p>' +
+      '<label class="field"><span>Token</span><input type="password" id="ghTk" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+      '<div class="acts"><button class="btn" id="tkNo">Back</button><button class="btn primary" id="tkOk">Sign in</button></div>');
+    $('#tkNo').onclick = ghSignInSheet;
+    $('#tkOk').onclick = function () {
+      var t = $('#ghTk').value.trim(); if (!t) return;
+      ghSaveAuth(t).catch(ghErr);
+    };
+  }
+
+  // ---- add a repository ----
+  function ghAddSheet() {
+    var tok = ghTok();
+    ui.open('<h2>Add repository</h2><p class="muted" style="margin:0">Loading your repositories…</p>');
+    PenGH.listRepos(tok).then(function (list) {
+      ui.open('<h2>Add repository</h2><label class="field"><span>Search, or type owner/name</span><input type="text" id="raQ" placeholder="mossy-jungle" autocomplete="off" autocapitalize="off" spellcheck="false"></label><div class="vlist" id="raList"></div>');
+      function render() {
+        var q = $('#raQ').value.trim().toLowerCase(), h = '';
+        var shown = list.filter(function (r) { return !q || r.full_name.toLowerCase().indexOf(q) >= 0; }).slice(0, 40);
+        shown.forEach(function (r) { h += '<button class="vrow" data-r="' + escAttr(r.full_name) + '"><b>' + esc(r.full_name) + '</b><small>' + (r.private ? 'private' : 'public') + ' · ' + esc(r.default_branch || 'main') + '</small></button>'; });
+        if (PenGH.validRepo(q) && !shown.some(function (r) { return r.full_name.toLowerCase() === q; })) h += '<button class="vrow" data-r="' + escAttr($('#raQ').value.trim()) + '"><b>Use ' + esc($('#raQ').value.trim()) + '</b></button>';
+        $('#raList').innerHTML = h || '<p class="muted">No matches.</p>';
+        $$('#raList .vrow').forEach(function (b) { b.onclick = function () { ghPickBranch(b.getAttribute('data-r')); }; });
+      }
+      $('#raQ').oninput = render; render();
+    }).catch(ghErr);
+  }
+  function ghPickBranch(repo) {
+    var tok = ghTok();
+    if (ghLink(repo)) { toast('Already added'); return; }
+    ui.open('<h2>' + esc(repo) + '</h2><p class="muted" style="margin:0">Loading branches…</p>');
+    Promise.all([PenGH.repoInfo(tok, repo), PenGH.branches(tok, repo)]).then(function (r) {
+      var def = r[0].default_branch, names = r[1].map(function (b) { return b.name; });
+      repo = r[0].full_name;
+      ui.open('<h2>' + esc(repo) + '</h2><label class="field"><span>Branch</span><select id="rbSel">' + names.map(function (n) { return '<option' + (n === def ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label>' +
+        '<p class="muted" style="font-size:12px;margin:0">Text files (HTML, CSS, JS, JSON, Markdown…) are downloaded into a folder. Images and other binary files are skipped.</p>' +
+        '<div class="acts"><button class="btn" id="rbNo">Cancel</button><button class="btn primary" id="rbOk">Download</button></div>');
+      $('#rbNo').onclick = function () { ui.close(); };
+      $('#rbOk').onclick = function () {
+        var name = baseOf(repo), root = folders.indexOf(name) >= 0 || GH.links.some(function (l) { return l.root === name; }) ? repo.replace('/', '-') : name;
+        var link = { repo: repo, branch: $('#rbSel').value, root: root, head: '', entry: '' };
+        GH.links.push(link); saveLinks(); ensureFolder(root);
+        ghPull(link, true).then(function () { cwd = root; if (screen === 'home') renderHome(); });
+      };
+    }).catch(ghErr);
+  }
+
+  // ---- pull ----
+  function ghPull(link, initial) {
+    var tok = ghTok(); if (!tok) { ghSheet(); return Promise.resolve(); }
+    if (screen === 'editor') saveCurrent();
+    var busy = ghBusy((initial ? 'Downloading ' : 'Pulling ') + link.repo);
+    var st = { added: 0, updated: 0, kept: 0, skipped: 0 }, touched = {}, head = '', truncated = false;
+    return PenGH.headOf(tok, link.repo, link.branch).then(function (h) {
+      head = h;
+      if (!initial && head === link.head) return 'uptodate';
+      busy.say('Reading the file list…');
+      return PenGH.treeAt(tok, link.repo, head).then(function (t) {
+        st.skipped = t.skipped; truncated = t.truncated;
+        var todo = [], n = 0;
+        t.files.forEach(function (e) { var p = ghPenFor(link, e.path); if (!p || p.gh.sha !== e.sha) todo.push({ e: e, p: p }); });
+        return PenGH.pool(todo, 4, function (it) {
+          return PenGH.blob(tok, link.repo, it.e.sha).then(function (text) {
+            busy.say('Downloaded ' + (++n) + ' of ' + todo.length);
+            if (text == null) { st.skipped++; return; }
+            var p = it.p, w;
+            if (!p) { w = ghWritePen(link, it.e, text); touched[w.id] = 1; st.added++; return; }
+            if (localSha(p) === PenGH.blobSha(text)) { ghWritePen(link, it.e, text, p); return; }
+            if (ghModified(p)) {
+              var theirs = Object.assign({}, p); theirs[p.gh.tab] = text;
+              snapshot(theirs, 'GitHub ' + head.slice(0, 7) + ' (kept your edits)', false);
+              p.gh.sha = it.e.sha; writePen(p, false); st.kept++;
+            } else {
+              snapshot(p, 'Before pull', true);
+              ghWritePen(link, it.e, text, p); touched[p.id] = 1; st.updated++;
+            }
+          });
+        });
+      }).then(function () { link.head = head; return 'ok'; });
+    }).then(function (res) {
+      busy.done(); ghAfter(touched);
+      if (res === 'uptodate') { toast('Already up to date'); return; }
+      var bits = [];
+      if (st.added) bits.push(st.added + ' new'); if (st.updated) bits.push(st.updated + ' updated');
+      if (st.kept) bits.push(st.kept + ' kept your edits (GitHub’s copy is under Versions)');
+      if (initial && st.skipped) bits.push(st.skipped + ' non-text skipped');
+      if (truncated) bits.push('list truncated: repo is very large');
+      toast(bits.length ? 'Pulled: ' + bits.join(', ') : 'Pulled — nothing changed');
+    }).catch(function (e) { busy.done(); ghErr(e); });
+  }
+
+  // ---- commit ----
+  function ghCommitSheet(link) {
+    if (!ghTok()) { ghSheet(); return; }
+    if (screen === 'editor') saveCurrent();
+    var ch = ghChanges(link);
+    if (!ch.length) { toast('No changes to commit'); return; }
+    var ais = []; ch.forEach(function (c) { if (c.pen.ai && ais.indexOf(c.pen.ai) < 0) ais.push(c.pen.ai); });
+    ui.open('<h2>Commit to ' + esc(link.repo) + '</h2><p class="muted" style="margin:0 0 8px">Branch <b>' + esc(link.branch) + '</b></p><div class="vlist">' +
+      ch.map(function (c, i) { return '<label class="crow"><input type="checkbox" checked data-c="' + i + '"><span>' + esc(c.path) + '</span><small>' + (c.isNew ? 'new' : 'edited') + '</small></label>'; }).join('') + '</div>' +
+      '<label class="field" style="margin-top:10px"><span>Message</span><textarea id="cmMsg" rows="3" spellcheck="true">' + esc('Update from Code Lantern' + (ais.length ? '\n\nAI: ' + ais.join(', ') : '')) + '</textarea></label>' +
+      '<div class="acts"><button class="btn" id="cmNo">Cancel</button><button class="btn primary" id="cmOk">Commit</button></div>');
+    $('#cmNo').onclick = function () { ui.close(); };
+    $('#cmOk').onclick = function () {
+      var sel = ch.filter(function (c, i) { return $('[data-c="' + i + '"]', sheetEl).checked; });
+      var msg = $('#cmMsg').value.trim() || 'Update from Code Lantern';
+      if (!sel.length) { toast('Tick at least one file'); return; }
+      ui.close();
+      var busy = ghBusy('Committing ' + sel.length + ' file' + (sel.length > 1 ? 's' : '') + '…');
+      PenGH.commitFiles(ghTok(), link.repo, link.branch, sel.map(function (c) { return { path: c.path, content: c.content }; }), msg).then(function (res) {
+        sel.forEach(function (c) {
+          var p = c.pen, tab = c.isNew ? c.tab : p.gh.tab;
+          p.gh = { repo: link.repo, path: c.path, sha: res.blobs[c.path], bsha: PenGH.blobSha(c.content), tab: tab };
+          if (c.isNew) { p.tab = tab; }
+          writePen(p, false);
+          snapshot(p, 'Committed ' + res.commit.slice(0, 7), false);
+        });
+        link.head = res.commit;
+        busy.done(); ghAfter();
+        toast('Committed ' + res.commit.slice(0, 7) + ' to ' + link.branch);
+      }).catch(function (e) { busy.done(); ghErr(e); });
+    };
+  }
+
+  // ---- history, bookmarked commits, restore ----
+  function ghIsMarked(link, sha) { return (GH.marks[link.repo] || []).filter(function (m) { return m.sha === sha; })[0]; }
+  function ghHistory(link, pen) {
+    if (!ghTok()) { ghSheet(); return; }
+    var path = pen && pen.gh ? pen.gh.path : '', busy = ghBusy('Loading history…');
+    PenGH.history(ghTok(), link.repo, link.branch, path).then(function (list) {
+      busy.done();
+      var rows = list.map(function (c, i) {
+        var m = ghIsMarked(link, c.sha);
+        return '<button class="vrow" data-v="' + i + '"><b>' + (m ? '★ ' + esc(m.label) : esc(c.message || '(no message)')) + '</b><small>' + c.sha.slice(0, 7) + ' · ' + ago(c.date) + (c.author ? ' · ' + esc(c.author) : '') + '</small></button>';
+      }).join('') || '<p class="muted">No commits found.</p>';
+      ui.open('<h2>' + esc(path ? baseOf(path) : link.repo) + ' · history</h2><div class="vlist">' + rows + '</div>');
+      $$('.vrow', sheetEl).forEach(function (b) { b.onclick = function () { ghCommitMenu(link, pen, list[+b.getAttribute('data-v')]); }; });
+    }).catch(function (e) { busy.done(); ghErr(e); });
+  }
+  function ghCommitMenu(link, pen, c) {
+    var m = ghIsMarked(link, c.sha);
+    ui.menu(c.sha.slice(0, 7) + ' · ' + (c.message || ''), [
+      pen ? { id: 'file', label: 'Load this version of the file', icon: 'reload' } : null,
+      { id: 'repo', label: 'Load all repo files from this commit', icon: 'reload' },
+      { id: 'mark', label: m ? 'Remove bookmark' : 'Bookmark this commit', icon: m ? 'x' : 'bookmark' },
+      { id: 'copy', label: 'Copy commit id', icon: 'copy' }
+    ].filter(Boolean)).then(function (a) {
+      if (a === 'file') ghLoadFile(link, pen, c);
+      else if (a === 'repo') ghRestoreRepo(link, c);
+      else if (a === 'copy') copyText(c.sha, 'Commit id copied');
+      else if (a === 'mark') {
+        if (m) { GH.marks[link.repo] = GH.marks[link.repo].filter(function (x) { return x.sha !== c.sha; }); saveMarks(); toast('Bookmark removed'); ghHistory(link, pen); }
+        else ui.prompt({ title: 'Bookmark this commit', label: 'Name', value: c.message || c.sha.slice(0, 7), ok: 'Bookmark' }).then(function (n) {
+          if (n === null) return;
+          (GH.marks[link.repo] = GH.marks[link.repo] || []).unshift({ sha: c.sha, label: cleanName(n) || c.sha.slice(0, 7), msg: c.message, t: Date.now() });
+          saveMarks(); toast('Commit bookmarked'); ghHistory(link, pen);
+        });
+      }
+    });
+  }
+  function ghMarksSheet(link) {
+    var marks = GH.marks[link.repo] || [];
+    ui.open('<h2>Bookmarked commits</h2><div class="vlist">' + (marks.map(function (m, i) {
+      return '<button class="vrow" data-v="' + i + '"><b>★ ' + esc(m.label) + '</b><small>' + m.sha.slice(0, 7) + ' · ' + esc(m.msg || '') + '</small></button>';
+    }).join('') || '<p class="muted">Nothing bookmarked yet. Open History and bookmark a commit.</p>') + '</div>');
+    $$('.vrow', sheetEl).forEach(function (b) { b.onclick = function () { ghCommitMenu(link, null, { sha: marks[+b.getAttribute('data-v')].sha, message: marks[+b.getAttribute('data-v')].msg }); }; });
+  }
+  function ghLoadFile(link, pen, c) {
+    var busy = ghBusy('Loading ' + c.sha.slice(0, 7) + '…');
+    PenGH.fileAt(ghTok(), link.repo, pen.gh.path, c.sha).then(function (text) {
+      busy.done();
+      snapshot(pen, 'Before loading ' + c.sha.slice(0, 7), true);
+      var tab = pen.gh.tab;
+      if (cur && cur.id === pen.id && screen === 'editor') { var src = { html: '', css: '', js: '' }; src[tab] = text; applyToEditor(src); }
+      else { var p = pens.get(pen.id); p[tab] = text; writePen(p); if (screen === 'home') renderHome(); }
+      toast('Loaded ' + c.sha.slice(0, 7) + '. Commit to keep it on GitHub.');
+    }).catch(function (e) { busy.done(); ghErr(e); });
+  }
+  function ghRestoreRepo(link, c) {
+    var tok = ghTok(), busy = ghBusy('Loading commit ' + c.sha.slice(0, 7) + '…');
+    if (screen === 'editor') saveCurrent();
+    var touched = {}, n = 0;
+    PenGH.treeAt(tok, link.repo, c.sha).then(function (t) {
+      var todo = [];
+      t.files.forEach(function (e) { var p = ghPenFor(link, e.path); if (p && localSha(p) !== e.sha) todo.push({ e: e, p: p }); });
+      return PenGH.pool(todo, 4, function (it) {
+        return PenGH.blob(tok, link.repo, it.e.sha).then(function (text) {
+          busy.say('Loaded ' + (++n) + ' of ' + todo.length);
+          var p = it.p; if (text == null || text === p[p.gh.tab]) return;
+          snapshot(p, 'Before restore to ' + c.sha.slice(0, 7), true);
+          p[p.gh.tab] = text; writePen(p); touched[p.id] = 1;
+        });
+      });
+    }).then(function () {
+      busy.done(); ghAfter(touched);
+      var k = Object.keys(touched).length;
+      toast(k ? k + ' file' + (k > 1 ? 's' : '') + ' loaded from ' + c.sha.slice(0, 7) + '. Commit to save it as a new commit.' : 'Already matches ' + c.sha.slice(0, 7));
+    }).catch(function (e) { busy.done(); ghErr(e); });
+  }
+
+  // ---- repo menu ----
+  function ghRepoMenu(link, pen) {
+    if (!link) { ghSheet(); return; }
+    var n = ghChanges(link).length, marks = (GH.marks[link.repo] || []).length;
+    ui.menu(link.repo + ' · ' + link.branch, [
+      { id: 'commit', label: 'Commit changes' + (n ? ' (' + n + ')' : ''), icon: 'upload' },
+      { id: 'pull', label: 'Pull latest', icon: 'reload' },
+      pen ? { id: 'fhist', label: 'History of this file', icon: 'reload' } : null,
+      { id: 'hist', label: 'Repo history', icon: 'reload' },
+      { id: 'marks', label: 'Bookmarked commits' + (marks ? ' (' + marks + ')' : ''), icon: 'bookmark' },
+      pen && pen.gh && pen.gh.tab === 'html' ? { id: 'entry', label: link.entry === pen.gh.path ? '✓ This is the run page' : 'Use as the run page for JS/CSS files', icon: 'play' } : null,
+      '-',
+      { id: 'unlink', label: 'Remove from Code Lantern', icon: 'trash', danger: true }
+    ].filter(Boolean)).then(function (a) {
+      if (a === 'commit') ghCommitSheet(link);
+      else if (a === 'pull') ghPull(link);
+      else if (a === 'fhist') ghHistory(link, pen);
+      else if (a === 'hist') ghHistory(link, null);
+      else if (a === 'marks') ghMarksSheet(link);
+      else if (a === 'entry') { link.entry = link.entry === pen.gh.path ? '' : pen.gh.path; saveLinks(); toast(link.entry ? 'Run page set' : 'Run page cleared'); }
+      else if (a === 'unlink') ui.confirm('Remove ' + link.repo + '?', 'Deletes the downloaded folder from this device, including uncommitted edits. GitHub is not touched.', 'Remove', true).then(function (ok) {
+        if (!ok) return;
+        Array.from(pens.values()).forEach(function (p) { if (p.gh && p.gh.repo === link.repo) deletePen(p.id); });
+        folders = folders.filter(function (x) { return x !== link.root && x.indexOf(link.root + '/') !== 0; }); saveFolders();
+        GH.links = GH.links.filter(function (l) { return l !== link; }); saveLinks();
+        if (cwd === link.root || cwd.indexOf(link.root + '/') === 0) cwd = '';
+        if (screen === 'editor') showHome(); else renderHome();
+        toast('Removed ' + link.repo);
+      });
+    });
+  }
+
+  // ---- running a repo's page: inline its relative <script src> and stylesheet links ----
+  function ghRunDoc(link, p) {
+    var entry = p.gh.tab === 'html' ? p : (link.entry && ghPenFor(link, link.entry));
+    if (!entry) return null;
+    var idx = {}; pens.forEach(function (q) { if (q.gh && q.gh.repo === link.repo) idx[q.gh.path] = q; });
+    var dir = parentOf(entry.gh.path);
+    function find(rel) {
+      rel = rel.split(/[?#]/)[0];
+      if (!rel || /^([a-z][a-z0-9+.-]*:|\/)/i.test(rel)) return null;
+      var parts = dir ? dir.split('/') : [];
+      rel.split('/').forEach(function (s) { if (s === '..') parts.pop(); else if (s && s !== '.') parts.push(s); });
+      return idx[parts.join('/')] || null;
+    }
+    var doc = buildDoc(entry);
+    doc = doc.replace(/<script\b([^>]*?)\bsrc\s*=\s*(["'])(.*?)\2([^>]*)>\s*<\/script\s*>/gi, function (m, a, q, src, b) {
+      var f = find(src); if (!f) return m;
+      return '<script' + a + b + '>' + (f[f.gh.tab] || '').replace(/<\/script/gi, '<\\/script') + '\n<\/script>';
+    });
+    doc = doc.replace(/<link\b[^>]*>/gi, function (m) {
+      if (!/rel\s*=\s*["']?stylesheet/i.test(m)) return m;
+      var h = /href\s*=\s*(["'])(.*?)\1/i.exec(m), f = h && find(h[2]); if (!f) return m;
+      return '<style>' + (f[f.gh.tab] || '').replace(/<\/style/gi, '<\\/style') + '</style>';
+    });
+    return doc;
+  }
+  $('#ghBtn').onclick = ghSheet;
 
   // ================= back / lifecycle =================
   function back() {
@@ -1379,7 +1859,7 @@
     back: back,
     flush: function () { if (screen === 'editor') saveCurrent(); return true; },
     onIntent: onIntent,
-    _debug: { buildDoc: function (p) { return buildDoc(p || cur); }, get cur() { return cur; }, eds: eds, run: run, emmet: expandAbbr }
+    _debug: { gh: { state: GH, pull: ghPull, changes: ghChanges, commit: ghCommitSheet, link: ghLink, runDoc: ghRunDoc, modified: ghModified }, pens: pens, buildDoc: function (p) { return buildDoc(p || cur); }, get cur() { return cur; }, eds: eds, run: run, emmet: expandAbbr }
   };
 
   // ================= init =================

@@ -23,7 +23,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- "Share → Pocket Pen" from any app pastes the text into a new pen -->
+            <!-- "Share → Code Lantern" from any app pastes the text into a new pen -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -32,7 +32,7 @@
 
             <!-- long-press the app icon → "New pen" -->
             <intent-filter>
-                <action android:name="com.pocketpen.app.NEW" />
+                <action android:name="com.codelantern.app.NEW" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
